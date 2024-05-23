@@ -44,7 +44,19 @@ conn.commit()
 entries_nombres = []
 entry_horas = []
 
-# Función para añadir una clase
+# Generar lista de opciones de tiempo en intervalos de 15 minutos
+def generar_horas():
+    horas = []
+    hora_inicial = datetime.strptime("08:00", "%H:%M")
+    hora_final = datetime.strptime("20:00", "%H:%M")
+    delta = timedelta(minutes=15)
+    while hora_inicial <= hora_final:
+        horas.append(hora_inicial.strftime("%H:%M"))
+        hora_inicial += delta
+    return horas
+
+horas_disponibles = generar_horas()
+
 # Función para añadir una clase
 def agregar_clase():
     global entries_nombres
@@ -69,7 +81,6 @@ def agregar_clase():
     print(f"Agregar en todo el mes: {agregar_todo_mes}")
 
     if nombres and lugar and any(dias_seleccionados) and (hora or (usar_horarios_diferentes and all(horarios[i] for i, d in enumerate(dias_seleccionados) if d))) and duracion:
-        # Primero, verificar conflictos en todas las fechas y horas seleccionadas
         for i, dia in enumerate(dias_seleccionados):
             if dia:
                 hora_a_usar = horarios[i] if usar_horarios_diferentes else hora
@@ -80,29 +91,17 @@ def agregar_clase():
                     fechas = [obtener_fecha(dia_nombre)]
 
                 for fecha in fechas:
-                    if verificar_conflicto(fecha, hora_a_usar):
+                    if not verificar_conflicto(fecha, hora_a_usar):
+                        cursor.execute('''
+                            INSERT INTO clases (nombres, lugar, fecha, hora, duracion, pendiente)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (nombres, lugar, fecha, hora_a_usar, duracion, 0))
+                        conn.commit()
+                    else:
                         messagebox.showerror("Error", f"Conflicto con otra clase el {dia_nombre} a las {hora_a_usar} en la fecha {fecha}")
                         return
-
-        # Si no hay conflictos, agregar las clases
-        for i, dia in enumerate(dias_seleccionados):
-            if dia:
-                hora_a_usar = horarios[i] if usar_horarios_diferentes else hora
-                dia_nombre = dias[i]
-                if agregar_todo_mes:
-                    fechas = obtener_fechas_restantes_mes(dia_nombre)
-                else:
-                    fechas = [obtener_fecha(dia_nombre)]
-
-                for fecha in fechas:
-                    cursor.execute('''
-                        INSERT INTO clases (nombres, lugar, fecha, hora, duracion, pendiente)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (nombres, lugar, fecha, hora_a_usar, duracion, 0))
-                    conn.commit()
         messagebox.showinfo("Éxito", "Clase añadida exitosamente")
-        limpiar_campos()
-        mostrar_calendario_mejorado()  # Actualizar el calendario
+        limpiar_campos()  # Llamar a la función para limpiar campos después de una operación exitosa
     else:
         campos_faltantes = []
         if not nombres:
@@ -117,38 +116,6 @@ def agregar_clase():
             campos_faltantes.append("Duración")
         messagebox.showerror("Error", f"Por favor, completa todos los campos: {', '.join(campos_faltantes)}")
 
-# Función para limpiar los campos de texto y checkboxes
-def limpiar_campos():
-    # Limpiar nombres de alumnos
-    for entry in entries_nombres:
-        entry.delete(0, tk.END)
-
-    # Limpiar lugar
-    entry_lugar.delete(0, tk.END)
-
-    # Limpiar duración
-    duracion_var.set(15)
-
-    # Limpiar hora
-    entry_hora.delete(0, tk.END)
-
-    # Limpiar checkboxes
-    for var in dias_vars:
-        var.set(0)
-
-    # Limpiar horarios diferentes
-    var_horarios_diferentes.set(0)
-    for entry in entry_horas:
-        entry.grid_remove()
-        entry.delete(0, tk.END)
-
-    # Limpiar agregar todo el mes
-    var_todo_mes.set(0)
-
- # Reiniciar el número de alumnos a 1
-    spin_alumnos.set(1)
-    actualizar_alumnos()  # Llamar a esta función para actualizar los campos de nombres de alumnos
-    
 # Función para verificar conflictos de horarios
 def verificar_conflicto(fecha, hora):
     cursor.execute('''
@@ -278,6 +245,38 @@ def actualizar_horarios():
             else:
                 entry_horas[i].grid_remove()
 
+# Función para limpiar los campos de texto y checkboxes
+def limpiar_campos():
+    # Limpiar nombres de alumnos
+    for entry in entries_nombres:
+        entry.delete(0, tk.END)
+
+    # Limpiar lugar
+    entry_lugar.delete(0, tk.END)
+
+    # Limpiar duración
+    duracion_var.set(15)
+
+    # Limpiar hora
+    entry_hora.delete(0, tk.END)
+
+    # Limpiar checkboxes
+    for var in dias_vars:
+        var.set(0)
+
+    # Limpiar horarios diferentes
+    var_horarios_diferentes.set(0)
+    for entry in entry_horas:
+        entry.grid_remove()
+        entry.delete(0, tk.END)
+
+    # Limpiar agregar todo el mes
+    var_todo_mes.set(0)
+
+    # Reiniciar el número de alumnos a 1
+    spin_alumnos.set(1)
+    actualizar_alumnos()  # Llamar a esta función para actualizar los campos de nombres de alumnos
+
 # Interfaz de entrada para los datos de las clases
 menu_frame = ttkb.Frame(root, padding=20)
 menu_frame.pack(side="left", fill="y", expand=False)
@@ -312,10 +311,9 @@ duracion_menu.current(0)
 
 ttkb.Label(duration_frame, text="minutos").grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-
 label_hora = ttkb.Label(registro_frame, text="Hora (HH:MM)")
 label_hora.grid(row=4, column=0, padx=5, pady=5, sticky="w")
-entry_hora = ttkb.Entry(registro_frame, width=23)
+entry_hora = ttkb.Combobox(registro_frame, values=horas_disponibles, width=5)
 entry_hora.grid(row=4, column=1, padx=5, pady=5, sticky="w")
 
 var_horarios_diferentes = tk.IntVar()
@@ -324,18 +322,18 @@ ttkb.Checkbutton(registro_frame, text="Usar horarios diferentes para cada día",
 var_todo_mes = tk.IntVar()
 ttkb.Checkbutton(registro_frame, text="Agregar en todo el mes", variable=var_todo_mes).grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 
-ttkb.Label(registro_frame, text="Días de la semana").grid(row=7, column=0, padx=5, pady=5, sticky="w")
+ttkb.Label(registro_frame, text="Días de la semana").grid(row=7, column=0, padx=5, pady=10, sticky="w")
 dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 dias_vars = [tk.IntVar() for _ in dias]
 
 for i, dia in enumerate(dias):
     ttkb.Checkbutton(registro_frame, text=dia, variable=dias_vars[i], command=actualizar_horarios).grid(row=8+i, column=0, padx=5, pady=5, sticky="w")
-    entry_hora_dia = ttkb.Entry(registro_frame, width=23)
+    entry_hora_dia = ttkb.Combobox(registro_frame, values=horas_disponibles, width=5)
     entry_hora_dia.grid(row=8+i, column=1, padx=5, pady=5, sticky="w")
     entry_hora_dia.grid_remove()  # Ocultar inicialmente
     entry_horas.append(entry_hora_dia)
 
-ttkb.Button(registro_frame, text="Añadir Clase", command=agregar_clase).grid(row=15, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+ttkb.Button(registro_frame, text="Añadir Clase", command=agregar_clase).grid(row=15, column=0, columnspan=2, padx=5, pady=15, sticky="w")
 
 # Frame para el calendario
 frame_calendario = ttkb.Frame(root, padding=20)
