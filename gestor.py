@@ -56,6 +56,54 @@ conn.commit()
 def mostrar_frame(frame):
     frame.tkraise()
 
+# Función para actualizar los nombres de los alumnos en el combobox de la clase
+def actualizar_nombres_alumnos():
+    cursor.execute('SELECT nombre FROM alumnos')
+    alumnos = cursor.fetchall()
+    nombres_alumnos = [alumno[0] for alumno in alumnos]
+    for combo in entry_alumnos:
+        combo['values'] = nombres_alumnos
+
+# Función para actualizar los nombres de los alumnos en el combobox de modificar alumno
+def actualizar_combobox_modificar_alumno():
+    cursor.execute('SELECT nombre FROM alumnos')
+    alumnos = cursor.fetchall()
+    nombres_alumnos = [alumno[0] for alumno in alumnos]
+    alumno_modificar['values'] = nombres_alumnos
+
+# Función para cargar datos del alumno seleccionado
+def cargar_datos_alumno(nombre_alumno):
+    cursor.execute('SELECT nombre, tutor, edad, contacto FROM alumnos WHERE nombre = ?', (nombre_alumno,))
+    alumno = cursor.fetchone()
+    if alumno:
+        entry_mod_nombre_alumno.delete(0, tk.END)
+        entry_mod_tutor.delete(0, tk.END)
+        entry_mod_edad.delete(0, tk.END)
+        entry_mod_contacto.delete(0, tk.END)
+        entry_mod_nombre_alumno.insert(0, alumno[0])
+        entry_mod_tutor.insert(0, alumno[1])
+        entry_mod_edad.insert(0, alumno[2])
+        entry_mod_contacto.insert(0, alumno[3])
+
+# Función para modificar los datos del alumno en la base de datos
+def modificar_alumno(nombre_original):
+    nombre = entry_mod_nombre_alumno.get().strip()
+    tutor = entry_mod_tutor.get().strip()
+    edad = entry_mod_edad.get().strip()
+    contacto = entry_mod_contacto.get().strip()
+
+    if nombre and tutor:
+        cursor.execute('''
+            UPDATE alumnos SET nombre = ?, tutor = ?, edad = ?, contacto = ?
+            WHERE nombre = ?
+        ''', (nombre, tutor, edad if edad else None, contacto if contacto else None, nombre_original))
+        conn.commit()
+        messagebox.showinfo("Éxito", "Alumno modificado exitosamente")
+        limpiar_campos_alumnos()
+        actualizar_combobox_modificar_alumno()
+    else:
+        messagebox.showerror("Error", "Por favor, completa los campos obligatorios (Nombre y Tutor)")
+
 # Paneles de contenido
 registro_alumnos_frame = ttkb.Labelframe(root, text="Registro de Alumnos", padding=20)
 registro_clases_frame = ttkb.Labelframe(root, text="Registro de Clases", padding=20)
@@ -86,8 +134,7 @@ horas_disponibles = generar_horas()
 
 # Función para limpiar los campos después de agregar una clase o alumno
 def limpiar_campos():
-    global entries_nombres
-    for entry in entries_nombres:
+    for entry in entry_alumnos:
         entry.delete(0, tk.END)
     entry_lugar.delete(0, tk.END)
     duracion_var.set(15)
@@ -123,16 +170,9 @@ def agregar_alumno():
         conn.commit()
         messagebox.showinfo("Éxito", "Alumno añadido exitosamente")
         limpiar_campos_alumnos()
+        actualizar_combobox_modificar_alumno()
     else:
         messagebox.showerror("Error", "Por favor, completa los campos obligatorios (Nombre y Tutor)")
-
-# Función para actualizar los nombres de los alumnos en el combobox de la clase
-def actualizar_nombres_alumnos():
-    cursor.execute('SELECT nombre FROM alumnos')
-    alumnos = cursor.fetchall()
-    nombres_alumnos = [alumno[0] for alumno in alumnos]
-    for combo in entry_alumnos:
-        combo['values'] = nombres_alumnos
 
 # Función para añadir una clase
 def agregar_clase():
@@ -146,7 +186,7 @@ def agregar_clase():
     usar_horarios_diferentes = var_horarios_diferentes.get()
     horarios = [entry_horas[i].get().strip() if dias_vars[i].get() else '' for i in range(len(dias))]
 
-    if nombres and lugar and any(dias_seleccionados)and hora or (usar_horarios_diferentes and all(horarios[i] for i, d in enumerate(dias_seleccionados) if d))and duracion:
+    if nombres and lugar and any(dias_seleccionados) and (hora or (usar_horarios_diferentes and all(horarios[i] for i, d in enumerate(dias_seleccionados) if d))) and duracion:
         for i, dia in enumerate(dias_seleccionados):
             if dia:
                 hora_a_usar = horarios[i] if usar_horarios_diferentes else hora
@@ -221,13 +261,12 @@ def mostrar_calendario_mejorado():
     dias_semana = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"]
 
     # Mostrar los botones de navegación del mes
-    ttkb.Button(frame_calendario, text="<", command=lambda: cambiar_mes(-1)).grid(row=0, column=0, sticky="w")
-    ttkb.Label(frame_calendario, text=f"{calendar.month_name[mes]} {ano}", bootstyle=INFO, anchor="center").grid(row=0, column=1, columnspan=5, sticky="ew")
-    ttkb.Button(frame_calendario, text=">", command=lambda: cambiar_mes(1)).grid(row=0, column=6, sticky="e")
+    ttkb.Button(frame_calendario, text="<", command=lambda: cambiar_mes(-1)).grid(row=0, column=0, sticky="w", padx=10, pady=10)
+    ttkb.Label(frame_calendario, text=f"{calendar.month_name[mes]} {ano}", bootstyle=INFO, anchor="center").grid(row=0, column=1, columnspan=5, sticky="ew", padx=10, pady=10)
+    ttkb.Button(frame_calendario, text=">", command=lambda: cambiar_mes(1)).grid(row=0, column=6, sticky="e", padx=10, pady=10)
 
-    # Mostrar los días de la semana
     for i, dia in enumerate(dias_semana):
-        ttkb.Label(frame_calendario, text=dia, bootstyle=SECONDARY).grid(row=1, column=i, padx=5, pady=5)
+        ttkb.Label(frame_calendario, text=dia, bootstyle=SECONDARY).grid(row=1, column=i, padx=25, pady=10)
 
     # Mostrar los días del mes
     for week in range(len(cal)):
@@ -257,20 +296,27 @@ def mostrar_clases_del_dia(dia, mes, ano):
     for widget in frame_clases.winfo_children():
         widget.destroy()
     fecha = datetime(ano, mes, dia).strftime('%Y-%m-%d')
-    cursor.execute('SELECT nombres, lugar, hora, duracion FROM clases WHERE fecha = ?', (fecha,))
+    cursor.execute('''
+        SELECT nombres, lugar, hora, duracion, contacto 
+        FROM clases 
+        JOIN alumnos ON clases.alumno_id = alumnos.id 
+        WHERE fecha = ?
+    ''', (fecha,))
     clases = cursor.fetchall()
     if clases:
         clases.sort(key=lambda x: datetime.strptime(x[2], '%H:%M'))
-        tree = ttkb.Treeview(frame_clases, columns=("Hora", "Alumno(s)", "Lugar"), show="headings", bootstyle=INFO)
+        tree = ttkb.Treeview(frame_clases, columns=("Hora", "Alumno(s)", "Lugar", "Contacto"), show="headings", bootstyle=INFO)
         tree.heading("Hora", text="Hora")
         tree.heading("Alumno(s)", text="Alumno(s)")
         tree.heading("Lugar", text="Lugar")
+        tree.heading("Contacto", text="Contacto")
         tree.column("Hora", width=100, anchor="center")
-        tree.column("Alumno(s)", width=200, anchor="center")
-        tree.column("Lugar", width=200, anchor="center")
+        tree.column("Alumno(s)", width=150, anchor="center")
+        tree.column("Lugar", width=150, anchor="center")
+        tree.column("Contacto", width=150, anchor="center")
         for clase in clases:
             hora_fin = (datetime.strptime(clase[2], '%H:%M') + timedelta(minutes=clase[3])).strftime('%H:%M')
-            tree.insert("", "end", values=(f"{clase[2]} - {hora_fin}", clase[0], clase[1]))
+            tree.insert("", "end", values=(f"{clase[2]} - {hora_fin}", clase[0], clase[1], clase[4]))
         tree.grid(row=1, column=0, columnspan=7, padx=10, pady=10, sticky="ew")
     else:
         ttkb.Label(frame_clases, text="No hay clases este día", bootstyle=WARNING).grid(row=1, column=0, columnspan=7, pady=20)
@@ -383,13 +429,17 @@ for i, dia in enumerate(dias):
 
 ttkb.Button(registro_clases_frame, text="Añadir Clase", command=agregar_clase).grid(row=15, column=0, columnspan=2, padx=5, pady=15, sticky="w")
 
-# Frame para el calendario
-frame_calendario = ttkb.Frame(root, padding=20)
-frame_calendario.grid(row=1, column=1, rowspan=2, sticky='nsew')
+# Crear un Frame contenedor para el calendario y las clases del día
+calendario_y_clases_frame = ttkb.Frame(root, padding=20)
+calendario_y_clases_frame.grid(row=1, column=1, rowspan=2, sticky='nsew')
 
-# Frame para las clases
-frame_clases = ttkb.Frame(root, padding=20)
-frame_clases.grid(row=2, column=1, sticky='nsew')
+# Frame para el calendario dentro del Frame contenedor
+frame_calendario = ttkb.Frame(calendario_y_clases_frame)
+frame_calendario.grid(row=0, column=0, sticky='nsew')
+
+# Frame para las clases dentro del Frame contenedor
+frame_clases = ttkb.Frame(calendario_y_clases_frame)
+frame_clases.grid(row=1, column=0, sticky='nsew')
 
 # Sección de Gestión de Base de Datos
 gestion_bd_frame = ttkb.Labelframe(root, text="Gestión de Base de Datos", padding=20)
@@ -411,7 +461,7 @@ for frame in (frame_modificar_alumno, frame_modificar_horario, frame_eliminar_al
 botones_gestion_frame = ttkb.Frame(root, padding=10)
 botones_gestion_frame.grid(row=0, column=2, sticky='ew')
 
-ttkb.Button(botones_gestion_frame, text="Modificar Alumno", command=lambda: mostrar_frame_gestion(frame_modificar_alumno)).grid(row=0, column=0, padx=5, pady=5)
+ttkb.Button(botones_gestion_frame, text="Modificar Alumno", command=lambda: [mostrar_frame_gestion(frame_modificar_alumno), actualizar_combobox_modificar_alumno()]).grid(row=0, column=0, padx=5, pady=5)
 ttkb.Button(botones_gestion_frame, text="Modificar Horario", command=lambda: mostrar_frame_gestion(frame_modificar_horario)).grid(row=0, column=1, padx=5, pady=5)
 ttkb.Button(botones_gestion_frame, text="Eliminar Alumno", command=lambda: mostrar_frame_gestion(frame_eliminar_alumno)).grid(row=1, column=0, padx=5, pady=5)
 ttkb.Button(botones_gestion_frame, text="Eliminar Clase", command=lambda: mostrar_frame_gestion(frame_eliminar_clase)).grid(row=1, column=1, padx=5, pady=5)
@@ -421,19 +471,6 @@ ttkb.Label(frame_modificar_alumno, text="Seleccione el Alumno:").grid(row=0, col
 alumno_modificar = ttkb.Combobox(frame_modificar_alumno, values=[], width=30)
 alumno_modificar.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 ttkb.Button(frame_modificar_alumno, text="Cargar Datos", command=lambda: cargar_datos_alumno(alumno_modificar.get())).grid(row=2, column=0, padx=5, pady=10, sticky="w")
-
-def cargar_datos_alumno(nombre_alumno):
-    cursor.execute('SELECT nombre, tutor, edad, contacto FROM alumnos WHERE nombre = ?', (nombre_alumno,))
-    alumno = cursor.fetchone()
-    if alumno:
-        entry_mod_nombre_alumno.delete(0, tk.END)
-        entry_mod_tutor.delete(0, tk.END)
-        entry_mod_edad.delete(0, tk.END)
-        entry_mod_contacto.delete(0, tk.END)
-        entry_mod_nombre_alumno.insert(0, alumno[0])
-        entry_mod_tutor.insert(0, alumno[1])
-        entry_mod_edad.insert(0, alumno[2])
-        entry_mod_contacto.insert(0, alumno[3])
 
 ttkb.Label(frame_modificar_alumno, text="Nombre del Alumno:").grid(row=3, column=0, padx=5, pady=5, sticky="w")
 entry_mod_nombre_alumno = ttkb.Entry(frame_modificar_alumno, width=30)
@@ -452,39 +489,6 @@ entry_mod_contacto = ttkb.Entry(frame_modificar_alumno, width=30)
 entry_mod_contacto.grid(row=10, column=0, padx=5, pady=5, sticky="w")
 
 ttkb.Button(frame_modificar_alumno, text="Modificar Alumno", command=lambda: modificar_alumno(alumno_modificar.get())).grid(row=11, column=0, padx=5, pady=10, sticky="w")
-
-def modificar_alumno(nombre_original):
-    nombre = entry_mod_nombre_alumno.get().strip()
-    tutor = entry_mod_tutor.get().strip()
-    edad = entry_mod_edad.get().strip()
-    contacto = entry_mod_contacto.get().strip()
-
-    if nombre and tutor:
-        cursor.execute('''
-            UPDATE alumnos SET nombre = ?, tutor = ?, edad = ?, contacto = ?
-            WHERE nombre = ?
-        ''', (nombre, tutor, edad if edad else None, contacto if contacto else None, nombre_original))
-        conn.commit()
-        messagebox.showinfo("Éxito", "Alumno modificado exitosamente")
-        limpiar_campos_alumnos()
-    else:
-        messagebox.showerror("Error", "Por favor, completa los campos obligatorios (Nombre y Tutor)")
-
-# Modificar Horario (aquí puedes agregar las funciones y campos necesarios para modificar horarios)
-
-# Eliminar Alumno
-ttkb.Label(frame_eliminar_alumno, text="Seleccione el Alumno a Eliminar:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-alumno_eliminar = ttkb.Combobox(frame_eliminar_alumno, values=[], width=30)
-alumno_eliminar.grid(row=1, column=0, padx=5, pady=5, sticky="w")
-ttkb.Button(frame_eliminar_alumno, text="Eliminar Alumno", command=lambda: eliminar_alumno(alumno_eliminar.get())).grid(row=2, column=0, padx=5, pady=10, sticky="w")
-
-def eliminar_alumno(nombre):
-    cursor.execute('DELETE FROM alumnos WHERE nombre = ?', (nombre,))
-    conn.commit()
-    messagebox.showinfo("Éxito", "Alumno eliminado exitosamente")
-    actualizar_nombres_alumnos()
-
-# Eliminar Clase (aquí puedes agregar las funciones y campos necesarios para eliminar clases)
 
 # Obtener el mes y año actual
 now = datetime.now()
