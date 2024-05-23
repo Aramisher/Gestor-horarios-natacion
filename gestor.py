@@ -26,23 +26,49 @@ root.geometry(f'{window_width}x{window_height}+{position_right}+{position_top}')
 conn = sqlite3.connect('horarios_natacion.db')
 cursor = conn.cursor()
 
-# Crear una tabla si no existe
+# Crear tablas si no existen
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS alumnos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL,
+        tutor TEXT NOT NULL,
+        edad INTEGER,
+        contacto TEXT
+    )
+''')
+
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS clases (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombres TEXT,
-        lugar TEXT,
-        fecha TEXT,
-        hora TEXT,
-        duracion INTEGER,
-        pendiente INTEGER
+        nombres TEXT NOT NULL,
+        lugar TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        hora TEXT NOT NULL,
+        duracion INTEGER NOT NULL,
+        pendiente INTEGER,
+        alumno_id INTEGER,
+        FOREIGN KEY (alumno_id) REFERENCES alumnos (id)
     )
 ''')
 conn.commit()
 
-# Definir entries_nombres y entry_horas globalmente
-entries_nombres = []
-entry_horas = []
+# Función para cambiar el contenido del panel principal
+def mostrar_frame(frame):
+    frame.tkraise()
+
+# Paneles de contenido
+registro_alumnos_frame = ttkb.Labelframe(root, text="Registro de Alumnos", padding=20)
+registro_clases_frame = ttkb.Labelframe(root, text="Registro de Clases", padding=20)
+
+for frame in (registro_alumnos_frame, registro_clases_frame):
+    frame.grid(row=1, column=0, sticky='nsew', padx=10, pady=10)
+
+# Menú de Navegación
+menu_frame = ttkb.Frame(root, padding=20)
+menu_frame.grid(row=0, column=0, sticky='ew')
+
+ttkb.Button(menu_frame, text="Registro de Alumnos", command=lambda: mostrar_frame(registro_alumnos_frame)).pack(side="left", padx=10)
+ttkb.Button(menu_frame, text="Registro de Clases", command=lambda: mostrar_frame(registro_clases_frame)).pack(side="left", padx=10)
 
 # Generar lista de opciones de tiempo en intervalos de 15 minutos
 def generar_horas():
@@ -57,28 +83,67 @@ def generar_horas():
 
 horas_disponibles = generar_horas()
 
+# Función para limpiar los campos después de agregar una clase o alumno
+def limpiar_campos():
+    global entries_nombres
+    for entry in entries_nombres:
+        entry.delete(0, tk.END)
+    entry_lugar.delete(0, tk.END)
+    duracion_var.set(15)
+    entry_hora.set('')
+    for var in dias_vars:
+        var.set(0)
+    var_horarios_diferentes.set(0)
+    for entry in entry_horas:
+        entry.grid_remove()
+        entry.set('')
+    var_todo_mes.set(0)
+    spin_alumnos.set(1)
+    actualizar_alumnos()
+
+def limpiar_campos_alumnos():
+    entry_nombre_alumno.delete(0, tk.END)
+    entry_tutor.delete(0, tk.END)
+    entry_edad.delete(0, tk.END)
+    entry_contacto.delete(0, tk.END)
+
+# Función para añadir un alumno
+def agregar_alumno():
+    nombre = entry_nombre_alumno.get().strip()
+    tutor = entry_tutor.get().strip()
+    edad = entry_edad.get().strip()
+    contacto = entry_contacto.get().strip()
+
+    if nombre and tutor:
+        cursor.execute('''
+            INSERT INTO alumnos (nombre, tutor, edad, contacto)
+            VALUES (?, ?, ?, ?)
+        ''', (nombre, tutor, edad if edad else None, contacto if contacto else None))
+        conn.commit()
+        messagebox.showinfo("Éxito", "Alumno añadido exitosamente")
+        limpiar_campos_alumnos()
+    else:
+        messagebox.showerror("Error", "Por favor, completa los campos obligatorios (Nombre y Tutor)")
+
+# Función para actualizar los nombres de los alumnos en el combobox de la clase
+def actualizar_nombres_alumnos():
+    cursor.execute('SELECT nombre FROM alumnos')
+    alumnos = cursor.fetchall()
+    nombres_alumnos = [alumno[0] for alumno in alumnos]
+    for combo in entry_alumnos:
+        combo['values'] = nombres_alumnos
+
 # Función para añadir una clase
 def agregar_clase():
     global entries_nombres
-    nombres = ', '.join([entry.get() for entry in entries_nombres if entry.get().strip()])
+    nombres = [combo.get().strip() for combo in entry_alumnos if combo.get().strip()]
     lugar = entry_lugar.get().strip()
     dias_seleccionados = [var.get() for var in dias_vars]
     hora = entry_hora.get().strip()
     duracion = duracion_var.get()
     agregar_todo_mes = var_todo_mes.get()
-
-    # Verificación de horarios diferentes
     usar_horarios_diferentes = var_horarios_diferentes.get()
     horarios = [entry_horas[i].get().strip() if dias_vars[i].get() else '' for i in range(len(dias))]
-
-    # Mensajes de depuración
-    print(f"Nombres: {nombres}")
-    print(f"Lugar: {lugar}")
-    print(f"Días seleccionados: {dias_seleccionados}")
-    print(f"Hora global: {hora}")
-    print(f"Horarios diferentes: {horarios}")
-    print(f"Duración: {duracion}")
-    print(f"Agregar en todo el mes: {agregar_todo_mes}")
 
     if nombres and lugar and any(dias_seleccionados) and (hora or (usar_horarios_diferentes and all(horarios[i] for i, d in enumerate(dias_seleccionados) if d))) and duracion:
         for i, dia in enumerate(dias_seleccionados):
@@ -92,16 +157,21 @@ def agregar_clase():
 
                 for fecha in fechas:
                     if not verificar_conflicto(fecha, hora_a_usar):
-                        cursor.execute('''
-                            INSERT INTO clases (nombres, lugar, fecha, hora, duracion, pendiente)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (nombres, lugar, fecha, hora_a_usar, duracion, 0))
+                        for nombre in nombres:
+                            cursor.execute('SELECT id FROM alumnos WHERE nombre = ?', (nombre,))
+                            alumno_id = cursor.fetchone()[0]
+                            cursor.execute('''
+                                INSERT INTO clases (nombres, lugar, fecha, hora, duracion, pendiente, alumno_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ''', (nombre, lugar, fecha, hora_a_usar, duracion, 0, alumno_id))
                         conn.commit()
                     else:
                         messagebox.showerror("Error", f"Conflicto con otra clase el {dia_nombre} a las {hora_a_usar} en la fecha {fecha}")
                         return
         messagebox.showinfo("Éxito", "Clase añadida exitosamente")
-        limpiar_campos()  # Llamar a la función para limpiar campos después de una operación exitosa
+        mostrar_calendario_mejorado()
+        root.update_idletasks()  
+        limpiar_campos()
     else:
         campos_faltantes = []
         if not nombres:
@@ -208,19 +278,20 @@ def mostrar_clases_del_dia(dia, mes, ano):
 
 # Función para actualizar los campos de nombres de alumnos
 def actualizar_alumnos():
-    global entries_nombres
+    global entry_alumnos
     for widget in frame_alumnos.winfo_children():
         widget.destroy()
     num_alumnos = spin_alumnos.get()
     if not num_alumnos:
         num_alumnos = 1
     num_alumnos = int(num_alumnos)
-    entries_nombres = []
+    entry_alumnos = []
     for i in range(num_alumnos):
         ttkb.Label(frame_alumnos, text=f" • Nombre del alumno {i+1}").grid(row=i, column=0, padx=5, pady=5, sticky="w")
-        entry_nombre = ttkb.Entry(frame_alumnos, width=20)
-        entry_nombre.grid(row=i, column=1, padx=5, pady=4, sticky="w")
-        entries_nombres.append(entry_nombre)
+        entry_alumno = ttkb.Combobox(frame_alumnos, values=[], width=20)
+        entry_alumno.grid(row=i, column=1, padx=5, pady=4, sticky="w")
+        entry_alumnos.append(entry_alumno)
+    actualizar_nombres_alumnos()
 
 def mostrar_ocultar_horarios():
     if var_horarios_diferentes.get():
@@ -245,52 +316,36 @@ def actualizar_horarios():
             else:
                 entry_horas[i].grid_remove()
 
-# Función para limpiar los campos de texto y checkboxes
-def limpiar_campos():
-    # Limpiar nombres de alumnos
-    for entry in entries_nombres:
-        entry.delete(0, tk.END)
+# Registro de Alumnos
+ttkb.Label(registro_alumnos_frame, text="Registro de Alumnos", font="-size 15 -weight bold").pack(pady=10)
+ttkb.Label(registro_alumnos_frame, text="Nombre del Alumno:").pack(pady=5, anchor="w")
+entry_nombre_alumno = ttkb.Entry(registro_alumnos_frame, width=30)
+entry_nombre_alumno.pack(pady=5)
 
-    # Limpiar lugar
-    entry_lugar.delete(0, tk.END)
+ttkb.Label(registro_alumnos_frame, text="Nombre del Tutor:").pack(pady=5, anchor="w")
+entry_tutor = ttkb.Entry(registro_alumnos_frame, width=30)
+entry_tutor.pack(pady=5)
 
-    # Limpiar duración
-    duracion_var.set(15)
+ttkb.Label(registro_alumnos_frame, text="Edad (Opcional):").pack(pady=5, anchor="w")
+entry_edad = ttkb.Entry(registro_alumnos_frame, width=30)
+entry_edad.pack(pady=5)
 
-    # Limpiar hora
-    entry_hora.delete(0, tk.END)
+ttkb.Label(registro_alumnos_frame, text="Contacto (Opcional):").pack(pady=5, anchor="w")
+entry_contacto = ttkb.Entry(registro_alumnos_frame, width=30)
+entry_contacto.pack(pady=5)
 
-    # Limpiar checkboxes
-    for var in dias_vars:
-        var.set(0)
+ttkb.Button(registro_alumnos_frame, text="Agregar Alumno", command=agregar_alumno).pack(pady=10)
 
-    # Limpiar horarios diferentes
-    var_horarios_diferentes.set(0)
-    for entry in entry_horas:
-        entry.grid_remove()
-        entry.delete(0, tk.END)
-
-    # Limpiar agregar todo el mes
-    var_todo_mes.set(0)
-
-    # Reiniciar el número de alumnos a 1
-    spin_alumnos.set(1)
-    actualizar_alumnos()  # Llamar a esta función para actualizar los campos de nombres de alumnos
-
-# Interfaz de entrada para los datos de las clases
-menu_frame = ttkb.Frame(root, padding=20)
-menu_frame.pack(side="left", fill="y", expand=False)
-
-# Marco alrededor de la sección de registro de alumnos
-registro_frame = ttkb.Labelframe(menu_frame, text="Registro de alumnos", bootstyle="primary", padding=10)
+# Registro de Clases
+registro_frame = ttkb.Labelframe(registro_clases_frame, text="Registro de Clases", bootstyle="primary", padding=10)
 registro_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-ttkb.Label(registro_frame, text="Número de alumnos").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+ttkb.Label(registro_frame, text="Número de Alumnos:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
 spin_alumnos = ttkb.Spinbox(registro_frame, from_=1, to=10, command=actualizar_alumnos, width=20)
 spin_alumnos.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 spin_alumnos.set(1)
 
-frame_alumnos = ttkb.Frame(registro_frame, padding=5)
+frame_alumnos = ttkb.Frame(registro_frame)
 frame_alumnos.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 actualizar_alumnos()
 
@@ -299,16 +354,13 @@ entry_lugar = ttkb.Entry(registro_frame, width=23)
 entry_lugar.grid(row=2, column=1, padx=5, pady=5, sticky="w")
 
 ttkb.Label(registro_frame, text="Duración").grid(row=3, column=0, padx=5, pady=5, sticky="w")
-
 duration_frame = ttkb.Frame(registro_frame)
 duration_frame.grid(row=3, column=1, padx=0, pady=5, sticky="w")
-
 duracion_var = tk.IntVar()
 duracion_menu = ttkb.Combobox(duration_frame, textvariable=duracion_var, width=2)
 duracion_menu['values'] = (15, 30, 45, 60)
 duracion_menu.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 duracion_menu.current(0)
-
 ttkb.Label(duration_frame, text="minutos").grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
 label_hora = ttkb.Label(registro_frame, text="Hora (HH:MM)")
@@ -326,6 +378,7 @@ ttkb.Label(registro_frame, text="Días de la semana").grid(row=7, column=0, padx
 dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 dias_vars = [tk.IntVar() for _ in dias]
 
+entry_horas = []
 for i, dia in enumerate(dias):
     ttkb.Checkbutton(registro_frame, text=dia, variable=dias_vars[i], command=actualizar_horarios).grid(row=8+i, column=0, padx=5, pady=5, sticky="w")
     entry_hora_dia = ttkb.Combobox(registro_frame, values=horas_disponibles, width=5)
@@ -337,11 +390,11 @@ ttkb.Button(registro_frame, text="Añadir Clase", command=agregar_clase).grid(ro
 
 # Frame para el calendario
 frame_calendario = ttkb.Frame(root, padding=20)
-frame_calendario.pack(side="top", fill="both", expand=True)
+frame_calendario.grid(row=1, column=1, sticky='nsew')
 
 # Frame para las clases
 frame_clases = ttkb.Frame(root, padding=20)
-frame_clases.pack(side="bottom", fill="both", expand=True)
+frame_clases.grid(row=2, column=1, sticky='nsew')
 
 # Obtener el mes y año actual
 now = datetime.now()
