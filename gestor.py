@@ -85,7 +85,7 @@ horas_disponibles = generar_horas()
 
 # Función para limpiar los campos después de agregar una clase o alumno
 def limpiar_campos():
-    global entries_nombres
+    global entries_nombres, entry_alumnos
     for entry in entries_nombres:
         entry.delete(0, tk.END)
     entry_lugar.delete(0, tk.END)
@@ -135,7 +135,7 @@ def actualizar_nombres_alumnos():
 
 # Función para añadir una clase
 def agregar_clase():
-    global entries_nombres
+    global entries_nombres, entry_alumnos
     nombres = [combo.get().strip() for combo in entry_alumnos if combo.get().strip()]
     lugar = entry_lugar.get().strip()
     dias_seleccionados = [var.get() for var in dias_vars]
@@ -316,8 +316,14 @@ def actualizar_horarios():
             else:
                 entry_horas[i].grid_remove()
 
-# Registro de Alumnos
-ttkb.Label(registro_alumnos_frame, text="Registro de Alumnos", font="-size 15 -weight bold").pack(pady=10)
+# Menú de Navegación
+menu_frame = ttkb.Frame(root, padding=20)
+menu_frame.grid(row=0, column=0, sticky='ew')
+
+ttkb.Button(menu_frame, text="Registro de Alumnos", command=lambda: mostrar_frame(registro_alumnos_frame)).pack(side="left", padx=10)
+ttkb.Button(menu_frame, text="Registro de Clases", command=lambda: mostrar_frame(registro_clases_frame)).pack(side="left", padx=10)
+
+# Registro de Alumnos (sin marco adicional)
 ttkb.Label(registro_alumnos_frame, text="Nombre del Alumno:").pack(pady=5, anchor="w")
 entry_nombre_alumno = ttkb.Entry(registro_alumnos_frame, width=30)
 entry_nombre_alumno.pack(pady=5)
@@ -336,25 +342,22 @@ entry_contacto.pack(pady=5)
 
 ttkb.Button(registro_alumnos_frame, text="Agregar Alumno", command=agregar_alumno).pack(pady=10)
 
-# Registro de Clases
-registro_frame = ttkb.Labelframe(registro_clases_frame, text="Registro de Clases", bootstyle="primary", padding=10)
-registro_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-ttkb.Label(registro_frame, text="Número de Alumnos:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-spin_alumnos = ttkb.Spinbox(registro_frame, from_=1, to=10, command=actualizar_alumnos, width=20)
+# Registro de Clases (sin marco adicional)
+ttkb.Label(registro_clases_frame, text="Número de Alumnos:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+spin_alumnos = ttkb.Spinbox(registro_clases_frame, from_=1, to=10, command=actualizar_alumnos, width=20)
 spin_alumnos.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 spin_alumnos.set(1)
 
-frame_alumnos = ttkb.Frame(registro_frame)
+frame_alumnos = ttkb.Frame(registro_clases_frame)
 frame_alumnos.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 actualizar_alumnos()
 
-ttkb.Label(registro_frame, text="Lugar").grid(row=2, column=0, padx=5, pady=5, sticky="w")
-entry_lugar = ttkb.Entry(registro_frame, width=23)
+ttkb.Label(registro_clases_frame, text="Lugar").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+entry_lugar = ttkb.Entry(registro_clases_frame, width=23)
 entry_lugar.grid(row=2, column=1, padx=5, pady=5, sticky="w")
 
-ttkb.Label(registro_frame, text="Duración").grid(row=3, column=0, padx=5, pady=5, sticky="w")
-duration_frame = ttkb.Frame(registro_frame)
+ttkb.Label(registro_clases_frame, text="Duración").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+duration_frame = ttkb.Frame(registro_clases_frame)
 duration_frame.grid(row=3, column=1, padx=0, pady=5, sticky="w")
 duracion_var = tk.IntVar()
 duracion_menu = ttkb.Combobox(duration_frame, textvariable=duracion_var, width=2)
@@ -363,30 +366,30 @@ duracion_menu.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 duracion_menu.current(0)
 ttkb.Label(duration_frame, text="minutos").grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-label_hora = ttkb.Label(registro_frame, text="Hora (HH:MM)")
+label_hora = ttkb.Label(registro_clases_frame, text="Hora (HH:MM)")
 label_hora.grid(row=4, column=0, padx=5, pady=5, sticky="w")
-entry_hora = ttkb.Combobox(registro_frame, values=horas_disponibles, width=5)
+entry_hora = ttkb.Combobox(registro_clases_frame, values=horas_disponibles, width=5)
 entry_hora.grid(row=4, column=1, padx=5, pady=5, sticky="w")
 
 var_horarios_diferentes = tk.IntVar()
-ttkb.Checkbutton(registro_frame, text="Usar horarios diferentes para cada día", variable=var_horarios_diferentes, command=mostrar_ocultar_horarios).grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+ttkb.Checkbutton(registro_clases_frame, text="Usar horarios diferentes para cada día", variable=var_horarios_diferentes, command=mostrar_ocultar_horarios).grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 
 var_todo_mes = tk.IntVar()
-ttkb.Checkbutton(registro_frame, text="Agregar en todo el mes", variable=var_todo_mes).grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+ttkb.Checkbutton(registro_clases_frame, text="Agregar en todo el mes", variable=var_todo_mes).grid(row=6, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 
-ttkb.Label(registro_frame, text="Días de la semana").grid(row=7, column=0, padx=5, pady=10, sticky="w")
+ttkb.Label(registro_clases_frame, text="Días de la semana").grid(row=7, column=0, padx=5, pady=10, sticky="w")
 dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 dias_vars = [tk.IntVar() for _ in dias]
 
 entry_horas = []
 for i, dia in enumerate(dias):
-    ttkb.Checkbutton(registro_frame, text=dia, variable=dias_vars[i], command=actualizar_horarios).grid(row=8+i, column=0, padx=5, pady=5, sticky="w")
-    entry_hora_dia = ttkb.Combobox(registro_frame, values=horas_disponibles, width=5)
+    ttkb.Checkbutton(registro_clases_frame, text=dia, variable=dias_vars[i], command=actualizar_horarios).grid(row=8+i, column=0, padx=5, pady=5, sticky="w")
+    entry_hora_dia = ttkb.Combobox(registro_clases_frame, values=horas_disponibles, width=5)
     entry_hora_dia.grid(row=8+i, column=1, padx=5, pady=5, sticky="w")
     entry_hora_dia.grid_remove()  # Ocultar inicialmente
     entry_horas.append(entry_hora_dia)
 
-ttkb.Button(registro_frame, text="Añadir Clase", command=agregar_clase).grid(row=15, column=0, columnspan=2, padx=5, pady=15, sticky="w")
+ttkb.Button(registro_clases_frame, text="Añadir Clase", command=agregar_clase).grid(row=15, column=0, columnspan=2, padx=5, pady=15, sticky="w")
 
 # Frame para el calendario
 frame_calendario = ttkb.Frame(root, padding=20)
@@ -395,6 +398,15 @@ frame_calendario.grid(row=1, column=1, sticky='nsew')
 # Frame para las clases
 frame_clases = ttkb.Frame(root, padding=20)
 frame_clases.grid(row=2, column=1, sticky='nsew')
+
+# Frame para la sección de gestión de la base de datos
+gestion_bd_frame = ttkb.Labelframe(root, text="Gestión de Base de Datos", padding=20)
+gestion_bd_frame.grid(row=0, column=2, rowspan=3, sticky='nsew', padx=10, pady=10)
+
+# Elementos de la sección de gestión de la base de datos
+ttkb.Button(gestion_bd_frame, text="Eliminar Alumno", command=None).grid(row=0, column=0, padx=5, pady=5)
+ttkb.Button(gestion_bd_frame, text="Modificar Horario", command=None).grid(row=1, column=0, padx=5, pady=5)
+ttkb.Button(gestion_bd_frame, text="Eliminar Clase", command=None).grid(row=2, column=0, padx=5, pady=5)
 
 # Obtener el mes y año actual
 now = datetime.now()
